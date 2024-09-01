@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airline Data Visualization Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css">
+    <style>
+        #map { height: 400px; }
+        .chart-container { height: 300px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">Airline Data Visualization Dashboard</h1>
+        <div class="mb-3">
+            <input type="file" id="csvFile" accept=".csv" class="form-control">
+        </div>
+        <div id="spinner" class="spinner-border text-primary d-none" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div id="visualizations" class="row">
+            <div class="col-md-6 mb-4">
+                <div id="map"></div>
+            </div>
+            <div class="col-md-6 mb-4">
+                <canvas id="fareByCity"></canvas>
+            </div>
+            <div class="col-md-6 mb-4">
+                <canvas id="carrierPerformance"></canvas>
+            </div>
+            <div class="col-md-6 mb-4">
+                <canvas id="distanceFare"></canvas>
+            </div>
+            <div class="col-md-6 mb-4">
+                <canvas id="marketShare"></canvas>
+            </div>
+            <div class="col-md-6 mb-4">
+                <canvas id="fareDistribution"></canvas>
+            </div>
+            <div class="col-md-6 mb-4">
+                <canvas id="topRoutes"></canvas>
+            </div>
+            <div class="col-md-6 mb-4">
+                <div id="networkGraph"></div>
+            </div>
+            <div class="col-md-12 mb-4">
+                <canvas id="correlationMatrix"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <script>
+        let map;
+        let data = [];
+
+        document.getElementById('csvFile').addEventListener('change', handleFileSelect);
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            const spinner = document.getElementById('spinner');
+            spinner.classList.remove('d-none');
+
+            Papa.parse(file, {
+                complete: function(results) {
+                    data = results.data;
+                    spinner.classList.add('d-none');
+                    visualizeData();
+                },
+                header: true
+            });
+        }
+
+        function visualizeData() {
+            initMap();
+            createFareByCityChart();
+            createCarrierPerformanceChart();
+            createDistanceFareChart();
+            createMarketShareChart();
+            createFareDistributionChart();
+            createTopRoutesChart();
+            createNetworkGraph();
+            createCorrelationMatrix();
+        }
+
+        function initMap() {
+            if (!map) {
+                map = L.map('map').setView([39.8283, -98.5795], 4);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            }
+
+            data.forEach(row => {
+                const lat1 = parseFloat(row.lat1), lon1 = parseFloat(row.lon1);
+                const lat2 = parseFloat(row.lat2), lon2 = parseFloat(row.lon2);
+                if (!isNaN(lat1) && !isNaN(lon1) && !isNaN(lat2) && !isNaN(lon2)) {
+                    const weight = Math.log(parseFloat(row.passengers) + 1);
+                    const color = getColorByFare(parseFloat(row.fare));
+                    L.polyline([[lat1, lon1], [lat2, lon2]], {color: color, weight: weight}).addTo(map);
+                }
+            });
+        }
+
+        function getColorByFare(fare) {
+            const hue = ((1 - Math.min(fare / 1000, 1)) * 120).toString(10);
+            return ["hsl(", hue, ",100%,50%)"].join("");
+        }
+
+        function createFareByCityChart() {
+            const ctx = document.getElementById('fareByCity').getContext('2d');
+            const cityPairs = [...new Set(data.map(d => `${d.city1} - ${d.city2}`))].slice(0, 10);
+            const fareData = cityPairs.map(pair => {
+                const [city1, city2] = pair.split(' - ');
+                return data.filter(d => d.city1 === city1 && d.city2 === city2).reduce((sum, d) => sum + parseFloat(d.fare), 0) / data.filter(d => d.city1 === city1 && d.city2 === city2).length;
+            });
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: cityPairs,
+                    datasets: [{
+                        label: 'Average Fare',
+                        data: fareData,
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Average Fares by City Pairs'
+                        }
+                    }
+                }
+            });
+        }
+
+        function createCarrierPerformanceChart() {
+            const ctx = document.getElementById('carrierPerformance').getContext('2d');
+            const carriers = [...new Set(data.map(d => d.carrier_lg))];
+            const performanceData = carriers.map(carrier => {
+                const carrierData = data.filter(d => d.carrier_lg === carrier);
+                return {
+                    x: carrierData.reduce((sum, d) => sum + parseFloat(d.fare), 0) / carrierData.length,
+                    y: carrierData.reduce((sum, d) => sum + parseFloat(d.passengers), 0) / carrierData.length,
+                    r: carrierData.length
+                };
+            });
+
+            new Chart(ctx, {
+                type: 'bubble',
+                data: {
+                    datasets: [{
+                        label: 'Carrier Performance',
+                        data: performanceData,
+                        backgroundColor: 'rgba(255, 99, 132, 0.6)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Carrier Performance (Fare vs Passengers)'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Average Fare'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Average Passengers'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createDistanceFareChart() {
+            const ctx = document.getElementById('distanceFare').getContext('2d');
+            const chartData = data.map(d => ({
+                x: parseFloat(d.nsmiles),
+                y: parseFloat(d.fare),
+                r: Math.log(parseFloat(d.passengers) + 1)
+            }));
+
+            new Chart(ctx, {
+                type: 'bubble',
+                data: {
+                    datasets: [{
+                        label: 'Distance vs Fare',
+                        data: chartData,
+                        backgroundColor: 'rgba(255, 206, 86, 0.6)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Distance vs Fare (Bubble size: Passengers)'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Distance (miles)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Fare ($)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createMarketShareChart() {
+            const ctx = document.getElementById('marketShare').getContext('2d');
+            const carriers = [...new Set(data.map(d => d.carrier_lg))];
+            const marketShareData = carriers.map(carrier => 
+                data.filter(d => d.carrier_lg === carrier).reduce((sum, d) => sum + parseFloat(d.large_ms), 0)
+            );
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: carriers,
+                    datasets: [{
+                        label: 'Market Share',
+                        data: marketShareData,
+                        backgroundColor: 'rgba(153, 102, 255, 0.6)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Market Share by Carrier'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Market Share'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createFareDistributionChart() {
+            const ctx = document.getElementById('fareDistribution').getContext('2d');
+            const fares = data.map(d => parseFloat(d.fare));
+            const bins = 20;
+            const histogramData = d3.histogram().thresholds(bins)(fares);
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: histogramData.map(d => d.x0.toFixed(2)),
+                    datasets: [{
+                        label: 'Frequency',
+                        data: histogramData.map(d => d.length),
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Fare Distribution'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Fare ($)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Frequency'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createTopRoutesChart() {
+    const ctx = document.getElementById('topRoutes').getContext('2d');
+    const routes = data.map(d => `${d.city1} - ${d.city2}`);
+    const routeCounts = routes.reduce((acc, route) => {
+        acc[route] = (acc[route] || 0) + 1;
+        return acc;
+    }, {});
+    const topRoutes = Object.entries(routeCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: topRoutes.map(r => r[0]),
+            datasets: [{
+                label: 'Number of Flights',
+                data: topRoutes.map(r => r[1]),
+                backgroundColor: 'rgba(255, 159, 64, 0.6)'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',  // Set indexAxis to 'y' to make it horizontal
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Top 10 Routes by Volume'
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Number of Flights'
+                    }
+                }
+            }
+        }
+    });
+}
+
+        function createNetworkGraph() {
+            const width = 600;
+            const height = 400;
+            const svg = d3.select("#networkGraph")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            const nodes = [...new Set(data.map(d => d.city1).concat(data.map(d => d.city2)))].map(d => ({id: d}));
+            const links = data.map(d => ({source: d.city1, target: d.city2, value: parseFloat(d.passengers)}));
+
+            const simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id))
+                .force("charge", d3.forceManyBody())
+                .force("center", d3.forceCenter(width / 2, height / 2));
+
+            const link = svg.append("g")
+                .selectAll("line")
+                .data(links)
+                .join("line")
+                .attr("stroke-width", d => Math.sqrt(d.value) * 0.1)
+                .attr("stroke", "#999");
+
+            const node = svg.append("g")
+                .selectAll("circle")
+                .data(nodes)
+                .join("circle")
+                .attr("r", 5)
+                .attr("fill", "#69b3a2");
+
+            node.append("title")
+                .text(d => d.id);
+
+            simulation.on("tick", () => {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node
+                    .attr("cx", d => d.x)
+                    .attr("cy", d => d.y);
+            });
+        }
+
+        function createCorrelationMatrix() {
+    const ctx = document.getElementById('correlationMatrix').getContext('2d');
+    const variables = ['fare', 'passengers', 'nsmiles', 'large_ms'];
+    const matrix = variables.map((var1, i) =>
+        variables.map((var2, j) => calculateCorrelation(var1, var2))
+    );
+
+    const dataPoints = [];
+    for (let i = 0; i < variables.length; i++) {
+        for (let j = 0; j < variables.length; j++) {
+            dataPoints.push({
+                x: i,
+                y: j,
+                value: matrix[i][j]
+            });
+        }
+    }
+
+    const colors = dataPoints.map(point => getColorForValue(point.value));
+
+    new Chart(ctx, {
+        type: 'bubble',
+        data: {
+            datasets: [{
+                label: 'Correlation Matrix',
+                data: dataPoints.map((point, index) => ({
+                    x: point.x,
+                    y: point.y,
+                    r: Math.abs(point.value) * 15, // Adjust size for better visualization
+                    backgroundColor: colors[index]
+                }))
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Correlation Matrix'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: context => `Correlation: ${context.raw.value.toFixed(2)}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'category',
+                    labels: variables,
+                    title: {
+                        display: true,
+                        text: 'Variables'
+                    }
+                },
+                y: {
+                    type: 'category',
+                    labels: variables,
+                    title: {
+                        display: true,
+                        text: 'Variables'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function getColorForValue(value) {
+    // A simple function to map correlation values to colors
+    const hue = ((1 - Math.abs(value)) * 120).toString(10); // Map -1 to 1 correlation to green-red spectrum
+    return `hsl(${hue}, 100%, 50%)`;
+}
+
+        function calculateCorrelation(var1, var2) {
+            const x = data.map(d => parseFloat(d[var1]));
+            const y = data.map(d => parseFloat(d[var2]));
+            const n = x.length;
+            const sumX = d3.sum(x);
+            const sumY = d3.sum(y);
+            const sumXY = d3.sum(x.map((xi, i) => xi * y[i]));
+            const sumX2 = d3.sum(x.map(xi => xi * xi));
+            const sumY2 = d3.sum(y.map(yi => yi * yi));
+            const numerator = n * sumXY - sumX * sumY;
+            const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+            return numerator / denominator;
+        }
+    </script>
+</body>
+</html>

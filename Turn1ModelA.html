@@ -1,97 +1,89 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Heart Attack Predictive Analysis Dashboard</title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Data Visualization</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.5.1"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <link href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" rel="stylesheet"/>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-      }
-      #uploadArea {
-        padding: 20px;
-        background-color: #f9f9f9;
-        border: 1px solid #ccc;
-        margin-bottom: 20px;
-      }
-      #charts {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-      }
-      .chart {
-        margin: 20px;
-        width: 400px;
-        height: 300px;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="uploadArea">
-      <input type="file" id="fileInput" accept=".csv" />
-      <button onclick="processCSV()">Process CSV</button>
+</head>
+<body>
+
+<div class="container">
+    <input type="file" id="fileInput" onchange="handleFileSelect(this.files)">
+    <div class="spinner-border" role="status" id="loadingSpinner" style="display: none;">
+        <span class="sr-only">Loading...</span>
     </div>
-    <div id="charts"></div>
-    <script>
-      function processCSV() {
-        const fileInput = document.getElementById('fileInput');
-        Papa.parse(fileInput.files[0], {
-          header: true,
-          complete: function (results) {
-            const data = results.data;
-            visualizeData(data);
-          },
+    <div id="map" style="width: 800px; height: 500px;"></div>
+    <canvas id="barChart" width="400" height="200"></canvas>
+    <div id="bubbleChart"></div>
+</div>
+
+<script>
+    let map, data;
+
+    function handleFileSelect(files) {
+        const file = files[0];
+        const reader = new FileReader();
+        document.getElementById('loadingSpinner').style.display = 'block';
+        reader.onload = (event) => {
+            data = Papa.parse(event.target.result, { header: true, dynamicTyping: true }).data;
+            visualizeData();
+        };
+        reader.readAsText(file);
+    }
+
+    function visualizeData() {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        initMap();
+        drawBarChart();
+        drawBubbleChart();
+    }
+
+    function initMap() {
+        map = L.map('map').setView([37.0902, -95.7129], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+        }).addTo(map);
+        // Logic to draw routes with thickness and color will go here
+    }
+
+    function drawBarChart() {
+        const ctx = document.getElementById('barChart').getContext('2d');
+        const chartData = aggregateDataForBarChart(data);
+        new Chart(ctx, {
+            type: 'bar',
+            data: chartData,
+            options: {
+                title: {
+                    display: true,
+                    text: 'Fares by City Pairs'
+                }
+            }
         });
-      }
+    }
 
-      function visualizeData(data) {
-        const chartsDiv = document.getElementById('charts');
-        chartsDiv.innerHTML = '';
+    function drawBubbleChart() {
+        const margin = { top: 20, right: 20, bottom: 30, left: 40 },
+            width = 500 - margin.left - margin.right,
+            height = 300 - margin.top - margin.bottom;
 
-        // Example Visualization: Age vs. Heart Attack
-        const ageData = data.map((row) => ({
-          age: row.Age,
-          heartAttack: row.Heart_Attack,
-        }));
-        const margin = { top: 20, right: 20, bottom: 30, left: 40 };
-        const width = 400 - margin.left - margin.right;
-        const height = 300 - margin.top - margin.bottom;
+        const svg = d3.select("#bubbleChart")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-        const xScale = d3
-          .scaleLinear()
-          .domain([0, d3.max(ageData, (d) => d.age)])
-          .range([0, width]);
-        const yScale = d3
-          .scaleLinear()
-          .domain([0, 1]) // Assuming Heart Attack is binary (0,1)
-          .range([height, 0]);
+        const bubbleData = prepareBubbleData(data);
+        // D3.js bubble chart logic will go here
+    }
 
-        const svg = d3
-          .select('#charts')
-          .append('svg')
-          .attr('width', width + margin.left + margin.right)
-          .attr('height', height + margin.top + margin.bottom)
-          .append('g')
-          .attr('transform', `translate(${margin.left}, ${margin.top})`);
+    // Helper functions for data aggregation and chart creation will be needed here
+</script>
 
-        svg
-          .selectAll('circle')
-          .data(ageData)
-          .enter()
-          .append('circle')
-          .attr('cx', (d) => xScale(d.age))
-          .attr('cy', (d) => yScale(d.heartAttack))
-          .attr('r', 5);
-
-        svg
-          .append('g')
-          .attr('transform', `translate(0, ${height})`)
-          .call(d3.axisBottom(xScale));
-
-        svg.append('g').call(d3.axisLeft(yScale));
-      }
-    </script>
-  </body>
+</body>
 </html>

@@ -1,163 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Heart Attack Predictive Analysis Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airline Data Visualization</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
     <style>
-      body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        padding: 20px;
-        background-color: #f4f4f4;
-      }
-      .container {
-        max-width: 1200px;
-        margin: auto;
-      }
-      #uploadSection {
-        margin-bottom: 20px;
-      }
-      #charts {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: space-around;
-      }
-      .chart-container {
-        width: 45%;
-        min-width: 300px;
-        margin: 10px;
-        background: white;
-        padding: 20px;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-      }
+        /* Basic styling */
+        body { padding: 20px; }
+        .chart-container { margin: 20px 0; }
+        #map { height: 400px; }
     </style>
-  </head>
-  <body>
-    <div class="container">
-      <h2>Heart Attack Predictive Analysis</h2>
-      <div id="uploadSection">
-        <input type="file" id="csvFile" accept=".csv" />
-        <button onclick="processCSV()">Process CSV</button>
-      </div>
+</head>
+<body>
 
-      <div id="charts"></div>
-    </div>
+<div class="container">
+    <h1>Airline Data Dashboard</h1>
+    <input type="file" id="csvFileInput" accept=".csv" onchange="handleFileSelect(event)" />
+    <div id="loader" style="display:none;">Loading...</div>
 
-    <script>
-      let data = [];
+    <!-- Visualization Containers -->
+    <div id="map" class="chart-container"></div>
+    <div id="barChart" class="chart-container"></div>
+    <!-- Add containers for other charts similarly -->
+</div>
 
-      function processCSV() {
-        const fileInput = document.getElementById('csvFile');
-        const file = fileInput.files[0];
-        Papa.parse(file, {
-          header: true,
-          dynamicTyping: true,
-          complete: function (results) {
-            data = results.data;
-            visualizeData();
-          },
-        });
-      }
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3"></script>
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script>
+    function handleFileSelect(evt) {
+        const file = evt.target.files[0];
+        if (file) {
+            document.getElementById('loader').style.display = 'block';
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const data = d3.csvParse(text);
+                visualizeData(data);
+            };
+            reader.readAsText(file);
+        }
+    }
 
-      function visualizeData() {
-        document.getElementById('charts').innerHTML = ''; // Clear previous charts
+    function visualizeData(data) {
+        // Data processing and visualization logic goes here
+        // Example: 
+        // - Create a map with routes
+        // - Generate charts using Chart.js or D3.js
+        
+        // Hide loader when done
+        document.getElementById('loader').style.display = 'none';
+    }
 
-        // Example visualizations - you would expand these with more detailed analysis
-        const ageDistribution = calculateAgeDistribution();
-        const genderRisk = calculateGenderRisk();
+    // Placeholder for visualization functions
+    function drawMap(data) {
+        // Leaflet map drawing logic
+    }
 
-        // Age Distribution Chart
-        createChart(
-          'Age Distribution',
-          'ageDistribution',
-          'bar',
-          ageDistribution.labels,
-          ageDistribution.data
-        );
-
-        // Gender Risk Chart
-        createChart(
-          'Gender Risk of Heart Attack',
-          'genderRisk',
-          'pie',
-          ['Male', 'Female'],
-          [genderRisk.male, genderRisk.female]
-        );
-      }
-
-      function calculateAgeDistribution() {
-        let ageGroups = { 'Below 40': 0, '40-59': 0, '60+': 0 };
-        data.forEach((entry) => {
-          if (entry.Age < 40) ageGroups['Below 40']++;
-          else if (entry.Age < 60) ageGroups['40-59']++;
-          else ageGroups['60+']++;
-        });
-        return {
-          labels: Object.keys(ageGroups),
-          data: Object.values(ageGroups),
-        };
-      }
-
-      function calculateGenderRisk() {
-        let genderCount = { male: 0, female: 0 };
-        let genderWithAttack = { male: 0, female: 0 };
-        data.forEach((entry) => {
-          if (entry.Gender === 'Male') {
-            genderCount.male++;
-            if (entry.Heart_Attack === 1) genderWithAttack.male++;
-          } else {
-            genderCount.female++;
-            if (entry.Heart_Attack === 1) genderWithAttack.female++;
-          }
-        });
-        return {
-          male: (genderWithAttack.male / genderCount.male) * 100,
-          female: (genderWithAttack.female / genderCount.female) * 100,
-        };
-      }
-
-      function createChart(title, id, type, labels, data) {
-        let container = document.createElement('div');
-        container.className = 'chart-container';
-        container.innerHTML = `<canvas id="${id}" width="400" height="400"></canvas>`;
-        document.getElementById('charts').appendChild(container);
-
-        new Chart(document.getElementById(id), {
-          type: type,
-          data: {
-            labels: labels,
-            datasets: [
-              {
-                label: title,
-                data: data,
-                backgroundColor: [
-                  'rgba(54, 162, 235, 0.2)',
-                  'rgba(255, 99, 132, 0.2)',
-                  'rgba(75, 192, 192, 0.2)',
-                ],
-                borderColor: [
-                  'rgba(54, 162, 235, 1)',
-                  'rgba(255, 99, 132, 1)',
-                  'rgba(75, 192, 192, 1)',
-                ],
-                borderWidth: 1,
-              },
-            ],
-          },
-          options: {
-            title: {
-              display: true,
-              text: title,
-            },
-            scales:
-              type === 'bar'
-                ? { yAxes: [{ ticks: { beginAtZero: true } }] }
-                : {},
-          },
-        });
-      }
-    </script>
-  </body>
+    // Initialize other charts similarly
+</script>
+</body>
 </html>
